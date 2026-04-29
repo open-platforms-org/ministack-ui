@@ -4,7 +4,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     image: ${DOCKER_USER:-local}/ministack-ui-backend:latest
-    container_name: ministack-ui-backend
     environment:
       - MINISTACK_ENDPOINT=${MINISTACK_ENDPOINT:-http://ministack:4566}
       - AWS_REGION=${AWS_REGION:-us-east-1}
@@ -19,7 +18,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     image: ${DOCKER_USER:-local}/ministack-ui-frontend:latest
-    container_name: ministack-ui-frontend
     ports:
       - "${FRONTEND_PORT:-3030}:3000"
     depends_on:
