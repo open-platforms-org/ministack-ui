@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { Readable } from 'stream';
 import cors from 'cors';
 import {
   DynamoDBClient,
@@ -148,15 +149,53 @@ app.get('/api/s3/buckets/:bucketName/objects', async (req: Request, res: Respons
 
 app.get('/api/s3/buckets/:bucketName/objects/download', async (req: Request, res: Response) => {
   try {
-    const key = req.query.key as string;
-    const url = await getSignedUrl(
-      s3Client,
-      new GetObjectCommand({ Bucket: req.params.bucketName, Key: key }),
-      { expiresIn: 3600 }
-    );
-    res.json({ url });
+    const rawKey = req.query.key as string | undefined;
+    if (!rawKey) return res.status(400).json({ error: 'missing query parameter: key' });
+
+    const key = decodeURIComponent(rawKey);
+
+    const filename = req.query.filename as string | undefined;
+    const redirect = (req.query.redirect as string | undefined) === 'true';
+
+    const params: any = { Bucket: req.params.bucketName, Key: key };
+    if (filename) {
+      params.ResponseContentDisposition = `attachment; filename="${filename}"`;
+    }
+
+    if (redirect) {
+      const url = await getSignedUrl(
+        s3Client,
+        new GetObjectCommand(params),
+        { expiresIn: 3600 }
+      );
+
+      return res.redirect(url);
+    }
+
+    const data = await s3Client.send(new GetObjectCommand(params));
+    const body = data.Body as any;
+
+    if (data.ContentType) res.setHeader('Content-Type', data.ContentType);
+    if (data.ContentLength) res.setHeader('Content-Length', String(data.ContentLength));
+    const disposition = filename ? `attachment; filename="${filename}"` : data.ContentDisposition;
+    if (disposition) res.setHeader('Content-Disposition', disposition);
+
+    if (body && typeof body.pipe === 'function') {
+      return body.pipe(res);
+    }
+
+    if (body && typeof body[Symbol.asyncIterator] === 'function') {
+      for await (const chunk of body) {
+        res.write(Buffer.from(chunk));
+      }
+      return res.end();
+    }
+
+    const fallbackUrl = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn: 3600 });
+    res.json({ url: fallbackUrl });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('Error generating presigned URL', err);
+    res.status(500).json({ error: err.message || 'failed to generate presigned url' });
   }
 });
 
