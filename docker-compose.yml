@@ -1,0 +1,34 @@
+services:
+  ministack-ui-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_USER:-local}/ministack-ui-backend:latest
+    container_name: ministack-ui-backend
+    environment:
+      - MINISTACK_ENDPOINT=${MINISTACK_ENDPOINT:-http://ministack:4566}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - PORT=3001
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    networks:
+      - ministack-ui-network
+
+  ministack-ui-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${DOCKER_USER:-local}/ministack-ui-frontend:latest
+    container_name: ministack-ui-frontend
+    ports:
+      - "${FRONTEND_PORT:-3030}:3000"
+    depends_on:
+      - ministack-ui-backend
+    networks:
+      - ministack-ui-network
+
+networks:
+  ministack-ui-network:
+    external: true
+    name: ${MINISTACK_NETWORK:-dockerfiles_core-network}
+
