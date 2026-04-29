@@ -29,7 +29,7 @@ docker network ls
 ```yaml
 services:
   ministack-ui-backend:
-    image: seunome/ministack-ui-backend:latest
+    image: ministack-ui/ministack-ui-backend:latest
     container_name: ministack-ui-backend
     environment:
       - MINISTACK_ENDPOINT=http://ministack:4566  # nome do container do MiniStack
@@ -40,7 +40,7 @@ services:
       - sua-rede  # mesma rede do MiniStack
 
   ministack-ui-frontend:
-    image: seunome/ministack-ui-frontend:latest
+    image: ministack-ui/ministack-ui-frontend:latest
     container_name: ministack-ui-frontend
     ports:
       - "3030:3000"
