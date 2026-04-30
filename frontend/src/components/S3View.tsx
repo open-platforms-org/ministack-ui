@@ -22,15 +22,32 @@ export default function S3View() {
 
   const handleDownload = async (key: string) => {
     if (!selectedBucket) return;
-    const win = window.open('', '_blank');
     try {
       const presigned = await getDownloadUrl(selectedBucket, key);
       if (!presigned) throw new Error('no presigned url returned');
-      win!.location.href = presigned;
+
+      const resp = await fetch(presigned, { method: 'GET' });
+      if (!resp.ok) throw new Error(`download request failed: ${resp.status} ${resp.statusText}`);
+
+      const cd = resp.headers.get('content-disposition') || '';
+      let filename = key.split('/').pop() || 'download';
+      const m = cd.match(/filename\*?=(?:UTF-8'')?\"?([^\";]+)\"?/i);
+      if (m && m[1]) {
+        try { filename = decodeURIComponent(m[1]); } catch (e) { filename = m[1]; }
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      try { win && win.close(); } catch (e) {}
       console.error('Download failed', err);
-      alert('Falha ao iniciar download: ' + (err as any)?.message || 'unknown error');
+      alert('Falha ao iniciar download: ' + ((err as any)?.message || 'unknown error'));
     }
   };
 
