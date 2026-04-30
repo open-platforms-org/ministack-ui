@@ -170,11 +170,11 @@ app.get('/api/s3/buckets/:bucketName/objects/presign', async (req: Request, res:
     try {
       const internalOrigin = new URL(ENDPOINT).origin;
       const publicOrigin = new URL(PUBLIC_MINISTACK_URL).origin;
-      if (internalOrigin !== publicOrigin) {
-        url = url.replace(internalOrigin, publicOrigin);
-      }
+
+      url = url.replace(internalOrigin, publicOrigin);
+
     } catch (e) {
-      // ignore URL parsing errors and return the generated url
+      // ignore URL parsing errors and return generated url
     }
 
     res.json({ url });
@@ -200,11 +200,23 @@ app.get('/api/s3/buckets/:bucketName/objects/download', async (req: Request, res
     }
 
     if (redirect) {
-      const url = await getSignedUrl(
+      let url = await getSignedUrl(
         s3Client,
         new GetObjectCommand(params),
         { expiresIn: 3600 }
       );
+
+      try {
+        const signed = new URL(url);
+        const internalHost = new URL(ENDPOINT).hostname;
+        const publicOrigin = new URL(PUBLIC_MINISTACK_URL).origin;
+        const looksLikeContainerHost = !signed.hostname.includes('.');
+        if (looksLikeContainerHost || signed.hostname === internalHost) {
+          url = url.replace(signed.origin, publicOrigin);
+        } else if (new URL(ENDPOINT).origin !== publicOrigin) {
+          url = url.replace(new URL(ENDPOINT).origin, publicOrigin);
+        }
+      } catch (e) {}
 
       return res.redirect(url);
     }
@@ -230,10 +242,14 @@ app.get('/api/s3/buckets/:bucketName/objects/download', async (req: Request, res
 
     let fallbackUrl = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn: 3600 });
     try {
-      const internalOrigin = new URL(ENDPOINT).origin;
+      const signed = new URL(fallbackUrl);
+      const internalHost = new URL(ENDPOINT).hostname;
       const publicOrigin = new URL(PUBLIC_MINISTACK_URL).origin;
-      if (internalOrigin !== publicOrigin) {
-        fallbackUrl = fallbackUrl.replace(internalOrigin, publicOrigin);
+      const looksLikeContainerHost = !signed.hostname.includes('.');
+      if (looksLikeContainerHost || signed.hostname === internalHost) {
+        fallbackUrl = fallbackUrl.replace(signed.origin, publicOrigin);
+      } else if (new URL(ENDPOINT).origin !== publicOrigin) {
+        fallbackUrl = fallbackUrl.replace(new URL(ENDPOINT).origin, publicOrigin);
       }
     } catch (e) {}
     res.json({ url: fallbackUrl });
