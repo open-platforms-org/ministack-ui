@@ -55,6 +55,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3001;
 const ENDPOINT = process.env.MINISTACK_ENDPOINT || 'http://localhost:4566';
 const REGION = process.env.AWS_REGION || 'us-east-1';
+const PUBLIC_MINISTACK_URL = process.env.PUBLIC_MINISTACK_URL || 'http://localhost:4566';
 
 const awsConfig = {
   endpoint: ENDPOINT,
@@ -147,6 +148,42 @@ app.get('/api/s3/buckets/:bucketName/objects', async (req: Request, res: Respons
   }
 });
 
+app.get('/api/s3/buckets/:bucketName/objects/presign', async (req: Request, res: Response) => {
+  try {
+    const rawKey = req.query.key as string | undefined;
+    if (!rawKey) return res.status(400).json({ error: 'missing query parameter: key' });
+
+    const key = decodeURIComponent(rawKey);
+    const filename = req.query.filename as string | undefined;
+
+    const params: any = { Bucket: req.params.bucketName, Key: key };
+    if (filename) {
+      params.ResponseContentDisposition = `attachment; filename="${filename}"`;
+    }
+
+    let url = await getSignedUrl(
+      s3Client,
+      new GetObjectCommand(params),
+      { expiresIn: 3600 }
+    );
+
+    try {
+      const internalOrigin = new URL(ENDPOINT).origin;
+      const publicOrigin = new URL(PUBLIC_MINISTACK_URL).origin;
+      if (internalOrigin !== publicOrigin) {
+        url = url.replace(internalOrigin, publicOrigin);
+      }
+    } catch (e) {
+      // ignore URL parsing errors and return the generated url
+    }
+
+    res.json({ url });
+  } catch (err: any) {
+    console.error('Error generating presigned URL (presign endpoint)', err);
+    res.status(500).json({ error: err.message || 'failed to generate presigned url' });
+  }
+});
+
 app.get('/api/s3/buckets/:bucketName/objects/download', async (req: Request, res: Response) => {
   try {
     const rawKey = req.query.key as string | undefined;
@@ -191,7 +228,14 @@ app.get('/api/s3/buckets/:bucketName/objects/download', async (req: Request, res
       return res.end();
     }
 
-    const fallbackUrl = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn: 3600 });
+    let fallbackUrl = await getSignedUrl(s3Client, new GetObjectCommand(params), { expiresIn: 3600 });
+    try {
+      const internalOrigin = new URL(ENDPOINT).origin;
+      const publicOrigin = new URL(PUBLIC_MINISTACK_URL).origin;
+      if (internalOrigin !== publicOrigin) {
+        fallbackUrl = fallbackUrl.replace(internalOrigin, publicOrigin);
+      }
+    } catch (e) {}
     res.json({ url: fallbackUrl });
   } catch (err: any) {
     console.error('Error generating presigned URL', err);

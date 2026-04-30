@@ -21,8 +21,17 @@ export default function S3View() {
   const objects = objectsData?.objects ?? [];
 
   const handleDownload = async (key: string) => {
-    const url = await getDownloadUrl(selectedBucket!, key);
-    window.open(url, '_blank');
+    if (!selectedBucket) return;
+    const win = window.open('', '_blank');
+    try {
+      const presigned = await getDownloadUrl(selectedBucket, key);
+      if (!presigned) throw new Error('no presigned url returned');
+      win!.location.href = presigned;
+    } catch (err) {
+      try { win && win.close(); } catch (e) {}
+      console.error('Download failed', err);
+      alert('Falha ao iniciar download: ' + (err as any)?.message || 'unknown error');
+    }
   };
 
   const formatSize = (bytes: number) => {
